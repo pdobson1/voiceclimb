@@ -196,7 +196,9 @@ summary { cursor: pointer; font-weight: 600 }
     like:1, just:1, okay:1, yeah:1, word:1, guess:1, well:1, then:1, them:1, they:1, your:1, its:1, isnt:1, rung:1, line:1,
     please:1, last:1, next:1, play:1, back:1, read:1, clue:1, move:1, swap:1, hint:1, help:1, down:1, row:1, rows:1 };
 
-  var S, ttsOn = true, listening = false, rec = null, recRunning = false, starting = false, consumed = {}, settleTimer = null, everStarted = false, failStreak = 0, watchdog = null, speakingUntil = 0, spokeAt = 0, timerId = null;
+  // iPhone and iPad: speaking aloud stops the mic picking anything up, and continuous listening is unreliable.
+  var IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var S, ttsOn = !IOS, listening = false, rec = null, recRunning = false, starting = false, consumed = {}, settleTimer = null, everStarted = false, failStreak = 0, watchdog = null, speakingUntil = 0, spokeAt = 0, timerId = null;
   var $ = function (id) { return document.getElementById(id) };
 
   function diff1(a, b) { if (!a || !b || a.length !== b.length) return false; var d = 0; for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) d++; return d === 1 }
@@ -270,6 +272,7 @@ summary { cursor: pointer; font-weight: 600 }
     if (!ttsOn || quiet || !("speechSynthesis" in window)) return;
     try {
       speechSynthesis.cancel();
+      if (IOS && rec && recRunning) try { rec.abort() } catch (e) {}
       var u = new SpeechSynthesisUtterance(text); u.rate = 1.05;
       spokeAt = Date.now(); speakingUntil = spokeAt + Math.min(15000, 1500 + text.length * 80);
       u.onend = u.onerror = function () { speakingUntil = Date.now() + 400 };
@@ -489,7 +492,8 @@ summary { cursor: pointer; font-weight: 600 }
   function startMic() {
     if (!SR) { $("micNote").textContent = "This browser has no speech recognition. Use Chrome, Edge or Safari, or type commands in the box."; return }
     if (!rec) {
-      rec = new SR(); rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 5;
+      rec = new SR(); rec.lang = "en-US"; rec.continuous = !IOS; rec.interimResults = true; rec.maxAlternatives = 5;
+      rec.onspeechstart = function () { micStatus("hearing you") };
       rec.onstart = function () { recRunning = true; starting = false; everStarted = true; consumed = {}; micStatus("listening") };
       rec.onresult = function (e) {
         failStreak = 0;
@@ -522,11 +526,12 @@ summary { cursor: pointer; font-weight: 600 }
         if (!listening) return micStatus("off");
         micStatus("restarting");
         // Restart straight away, inside the browser's own event, as some browsers refuse a delayed start.
-        tryStart();
+        // On iPhone, wait until the game stops talking; the watchdog restarts it then.
+        if (!(IOS && busy())) tryStart();
       };
     }
     listening = true; syncMic(); tryStart();
-    if (!watchdog) watchdog = setInterval(function () { if (listening && !recRunning && !starting) tryStart() }, 2000);
+    if (!watchdog) watchdog = setInterval(function () { if (listening && !recRunning && !starting && !(IOS && busy())) tryStart() }, IOS ? 700 : 2000);
     if (!S.start) readCurrent();
   }
   // Handles one recognized phrase, skipping any part of it already acted on.
@@ -551,7 +556,10 @@ summary { cursor: pointer; font-weight: 600 }
 
   // ---------- wiring ----------
   $("mic").addEventListener("click", function () { listening ? stopMic(false) : startMic() });
-  $("ttsBtn").addEventListener("click", function () { ttsOn = !ttsOn; syncTts() });
+  $("ttsBtn").addEventListener("click", function () {
+    ttsOn = !ttsOn; syncTts();
+    if (IOS && ttsOn) $("say").textContent = "On iPhone and iPad, the mic pauses while the game talks. Wait for it to finish before you answer.";
+  });
   $("newBtn").addEventListener("click", function () { loadPuzzle(S.pi + 1) });
   $("winNext").addEventListener("click", function () { loadPuzzle(S.pi + 1) });
   $("cmdform").addEventListener("submit", function (e) { e.preventDefault(); var v = $("cmd").value.trim(); if (v) handle([v]); $("cmd").value = "" });
@@ -571,8 +579,9 @@ summary { cursor: pointer; font-weight: 600 }
   });
 
   function start(data) {
-    if (data && data.S && data.S.mid) { S = data.S; ttsOn = data.ttsOn !== false } else S = newState(0);
+    if (data && data.S && data.S.mid) { S = data.S; ttsOn = IOS ? !!data.ttsOn : data.ttsOn !== false } else S = newState(0);
     syncTts(); render(); tick();
+    if (IOS) $("micNote").textContent = "On iPhone and iPad: Siri & Dictation must be on (Settings → General → Keyboard → Enable Dictation), and Safari must be allowed to use the microphone. Spoken replies start off, because they stop the mic hearing you. You can also type commands in the box above or letters straight onto a rung.";
     $("say").textContent = "Press Start listening, then say the answer to rung 1.";
     timerId = setInterval(tick, 500);
   }
