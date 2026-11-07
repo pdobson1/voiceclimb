@@ -70,7 +70,7 @@ h1 small { display: block; font-family: var(--f-body); font-weight: 500; font-si
 .moves button:focus-visible { outline: 2px solid var(--accent) }
 .gap { height: 12px; position: relative }
 .gap.link::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: var(--good); border-radius: 2px }
-.row.movable { touch-action: none; user-select: none; -webkit-user-select: none; transition: transform .15s ease }
+.row.movable { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: transform .15s ease }
 .row.movable:active { cursor: grabbing }
 .row.dragging { transition: none; z-index: 5; box-shadow: 0 8px 24px rgba(0,0,0,.18); border-color: var(--accent) }
 .row.shake { animation: shake .35s }
@@ -241,6 +241,7 @@ summary { cursor: pointer; font-weight: 600 }
 
   // ---------- rendering ----------
   function render() {
+    if (drag && drag.active) { pendingRender = true; return }
     var L = $("ladder"); L.innerHTML = "";
     for (var i = 0; i < 7; i++) {
       var r = rowAt(i), locked = (i === 0 || i === 6) && !S.open;
@@ -325,47 +326,49 @@ summary { cursor: pointer; font-weight: 600 }
   }
   function capital(s) { return s.charAt(0).toUpperCase() + s.slice(1) }
 
-  // ---------- drag to reorder (touch and mouse) ----------
-  var drag = null, suppressClick = false;
-  function dragStart(e) {
-    var row = e.target.closest(".row");
-    if (!row || e.target.closest("button") || e.button > 0) return;
+  // ---------- drag to reorder ----------
+  // Touch uses touch events (the most reliable on iPhone Safari); mouse and pen use pointer events.
+  var drag = null, suppressClick = false, pendingRender = false;
+  function dragBegin(target, y, id) {
+    var row = target.closest && target.closest(".row");
+    if (!row || target.closest("button")) return;
     var i = +row.dataset.i;
     if (i < 1 || i > 5 || S.open || S.done) return;
-    drag = { i: i, to: i, row: row, y0: e.clientY, id: e.pointerId, active: false };
+    drag = { i: i, to: i, y0: y, id: id, active: false };
   }
-  function dragMove(e) {
-    if (!drag || e.pointerId !== drag.id) return;
-    var dy = e.clientY - drag.y0;
+  function midRows() { return [].slice.call(document.querySelectorAll("#ladder .row")).filter(function (r) { var k = +r.dataset.i; return k >= 1 && k <= 5 }) }
+  function dragTo(y) {
+    var dy = y - drag.y0;
     if (!drag.active) {
-      if (Math.abs(dy) < 8) return;
+      if (Math.abs(dy) < 8) return false;
+      var mids = midRows();
       drag.active = true;
-      drag.mids = [].slice.call(document.querySelectorAll(".row")).filter(function (r) { var k = +r.dataset.i; return k >= 1 && k <= 5 });
-      drag.pitch = drag.mids[1].getBoundingClientRect().top - drag.mids[0].getBoundingClientRect().top;
-      drag.row.classList.add("dragging");
-      try { drag.row.setPointerCapture(e.pointerId) } catch (x) {}
+      drag.pitch = mids[1].getBoundingClientRect().top - mids[0].getBoundingClientRect().top;
+      mids[drag.i - 1].classList.add("dragging");
     }
-    e.preventDefault();
-    var lo = (1 - drag.i) * drag.pitch - drag.pitch * 0.4, hi = (5 - drag.i) * drag.pitch + drag.pitch * 0.4;
-    dy = Math.max(lo, Math.min(hi, dy));
-    drag.row.style.transform = "translateY(" + dy + "px)";
-    var to = Math.max(1, Math.min(5, drag.i + Math.round(dy / drag.pitch)));
+    var p = drag.pitch, mids2 = midRows();
+    dy = Math.max((1 - drag.i) * p - p * 0.4, Math.min((5 - drag.i) * p + p * 0.4, dy));
+    var to = Math.max(1, Math.min(5, drag.i + Math.round(dy / p)));
     drag.to = to;
-    drag.mids.forEach(function (r) {
+    mids2.forEach(function (r) {
       var k = +r.dataset.i, shift = 0;
-      if (k === drag.i) return;
-      if (drag.i < to && k > drag.i && k <= to) shift = -drag.pitch;
-      if (drag.i > to && k < drag.i && k >= to) shift = drag.pitch;
+      if (k === drag.i) { r.style.transform = "translateY(" + dy + "px)"; return }
+      if (drag.i < to && k > drag.i && k <= to) shift = -p;
+      if (drag.i > to && k < drag.i && k >= to) shift = p;
       r.style.transform = shift ? "translateY(" + shift + "px)" : "";
     });
+    return true;
   }
-  function dragEnd(e) {
-    if (!drag || e.pointerId !== drag.id) return;
+  function dragFinish() {
     var d = drag; drag = null;
-    if (!d.active) return;
-    suppressClick = true; setTimeout(function () { suppressClick = false }, 50);
+    if (!d) return false;
+    if (!d.active) { if (pendingRender) { pendingRender = false; render() } return false }
+    suppressClick = true; setTimeout(function () { suppressClick = false }, 400);
+    pendingRender = false;
     if (d.to !== d.i) moveRow(d.i, d.to, true); else render();
+    return true;
   }
+  function touchById(list, id) { for (var k = 0; k < list.length; k++) if (list[k].identifier === id) return list[k]; return null }
   function moveRow(from, to, quiet) {
     if (S.open) return say("The ladder is locked in. Solve the top and bottom rungs.");
     if (from < 1 || from > 5 || to < 1 || to > 5 || from === to) return say("Rungs one to five can move. Try “move 3 up” or “swap 1 and 4”.");
@@ -651,10 +654,32 @@ summary { cursor: pointer; font-weight: 600 }
   function syncTts() { $("ttsBtn").textContent = "Read aloud: " + (ttsOn ? "on" : "off"); if (!ttsOn && "speechSynthesis" in window) speechSynthesis.cancel() }
 
   // ---------- wiring ----------
-  $("ladder").addEventListener("pointerdown", dragStart);
-  document.addEventListener("pointermove", dragMove, { passive: false });
-  document.addEventListener("pointerup", dragEnd);
-  document.addEventListener("pointercancel", dragEnd);
+  $("ladder").addEventListener("touchstart", function (e) {
+    if (drag || e.touches.length > 1) { drag = null; return }
+    var t = e.changedTouches[0]; dragBegin(e.target, t.clientY, "t" + t.identifier);
+  }, { passive: true });
+  document.addEventListener("touchmove", function (e) {
+    if (!drag || drag.id.charAt(0) !== "t") return;
+    var t = touchById(e.changedTouches, +drag.id.slice(1)); if (!t) return;
+    if (dragTo(t.clientY)) e.preventDefault();
+  }, { passive: false });
+  function touchDone(e) {
+    if (!drag || drag.id.charAt(0) !== "t" || !touchById(e.changedTouches, +drag.id.slice(1))) return;
+    if (dragFinish() && e.cancelable) e.preventDefault();  // no tap-click after a drag
+  }
+  document.addEventListener("touchend", touchDone, { passive: false });
+  document.addEventListener("touchcancel", touchDone, { passive: false });
+  $("ladder").addEventListener("pointerdown", function (e) {
+    if (e.pointerType === "touch" || e.button > 0) return;
+    dragBegin(e.target, e.clientY, "p" + e.pointerId);
+  });
+  document.addEventListener("pointermove", function (e) {
+    if (!drag || drag.id !== "p" + e.pointerId) return;
+    if (dragTo(e.clientY)) e.preventDefault();
+  });
+  function pointerDone(e) { if (drag && drag.id === "p" + e.pointerId) dragFinish() }
+  document.addEventListener("pointerup", pointerDone);
+  document.addEventListener("pointercancel", pointerDone);
   $("ladder").addEventListener("click", function (e) { if (suppressClick) { e.stopPropagation(); suppressClick = false } }, true);
   $("mic").addEventListener("click", function () { if (needTap) return; listening ? stopMic(false) : startMic() });
   // Any tap on the page revives a paused iPhone mic (runs before the tap's own action).
