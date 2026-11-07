@@ -34,7 +34,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--f-body); fon
 header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap }
 h1 { font-family: var(--f-display); font-weight: 800; font-size: 2.2rem; line-height: 1; margin: 0; letter-spacing: -0.02em; text-wrap: balance }
 h1 small { display: block; font-family: var(--f-body); font-weight: 500; font-size: 0.85rem; color: var(--muted); letter-spacing: 0; margin-top: 6px }
-.meta { display: flex; gap: 14px; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.85rem }
+.meta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.85rem }
 .meta b { color: var(--ink); font-weight: 600 }
 
 .clue { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 4px; min-height: 84px }
@@ -70,6 +70,9 @@ h1 small { display: block; font-family: var(--f-body); font-weight: 500; font-si
 .moves button:focus-visible { outline: 2px solid var(--accent) }
 .gap { height: 12px; position: relative }
 .gap.link::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: var(--good); border-radius: 2px }
+.row.movable { touch-action: none; user-select: none; -webkit-user-select: none; transition: transform .15s ease }
+.row.movable:active { cursor: grabbing }
+.row.dragging { transition: none; z-index: 5; box-shadow: 0 8px 24px rgba(0,0,0,.18); border-color: var(--accent) }
 .row.shake { animation: shake .35s }
 @keyframes shake { 25% { transform: translateX(-6px) } 50% { transform: translateX(6px) } 75% { transform: translateX(-3px) } }
 @media (prefers-reduced-motion: reduce) { .row.shake { animation: none } }
@@ -86,6 +89,7 @@ h1 small { display: block; font-family: var(--f-body); font-weight: 500; font-si
 @media (prefers-reduced-motion: reduce) { #mic.on .dot { animation: none } }
 #mic:focus-visible, .chip:focus-visible, #cmd:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 .chip { font: 500 0.85rem var(--f-body); border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 8px 14px; cursor: pointer }
+.chip.small { padding: 4px 10px; font-size: 0.78rem }
 .chip:hover { border-color: var(--accent); color: var(--accent) }
 .heard { font-size: 0.9rem; color: var(--muted); min-height: 1.5em; overflow-wrap: anywhere }
 .heard b { color: var(--ink); font-weight: 600 }
@@ -99,7 +103,26 @@ summary { cursor: pointer; font-weight: 600 }
 .cmds { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 16px; margin-top: 10px; font-size: 0.88rem }
 .cmds div { min-width: 0 }
 .cmds code { font-family: var(--f-mono); font-size: 0.82rem; color: var(--accent) }
-@media (max-width: 460px) { .cmds { grid-template-columns: 1fr } .tile { width: 2.3rem; height: 2.3rem; font-size: 1.15rem } .ladder { padding: 6px 30px } .ladder::before { left: 8px } .ladder::after { right: 8px } .row::before { left: -24px; width: 24px } .row::after { right: -24px; width: 24px } }
+@media (max-width: 460px) {
+  body { padding-block: 8px 24px }
+  .wrap { gap: 10px }
+  header { flex-wrap: nowrap; align-items: center }
+  h1 { font-size: 1.4rem } h1 small { display: none }
+  .meta { gap: 8px; font-size: 0.75rem; flex-wrap: nowrap; white-space: nowrap }
+  .clue { padding: 8px 12px; min-height: 0; gap: 2px }
+  .clue .lbl { font-size: 0.68rem } .clue .txt { font-size: 1.05rem } .clue .phase { font-size: 0.78rem }
+  .cmds { grid-template-columns: 1fr }
+  .ladder { padding: 2px 30px } .ladder::before { left: 8px } .ladder::after { right: 8px }
+  .row { padding: 3px 6px } .row::before { left: -24px; width: 24px } .row::after { right: -24px; width: 24px }
+  .gap { height: 5px }
+  .tile { width: 2.1rem; height: 2.1rem; font-size: 1.05rem }
+  .voice { padding: 10px 12px; gap: 6px }
+  .voice-top { gap: 8px; flex-wrap: nowrap }
+  #mic { padding: 8px 14px; flex: 1 1 auto; justify-content: center; min-width: 0 } .chip { padding: 6px 11px } .chip.small { padding: 3px 9px }
+  .say:empty { display: none }
+  #micState { font-size: 0.78rem }
+  .heard, .say { font-size: 0.85rem }
+}
 
 .win { background: var(--good-bg); border: 1.5px solid var(--good); color: var(--ink); border-radius: 10px; padding: 14px 16px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap }
 .win strong { font-family: var(--f-display); font-size: 1.2rem }
@@ -110,7 +133,7 @@ summary { cursor: pointer; font-weight: 600 }
 <div class="wrap">
   <header>
     <h1>Rungs<small>A word ladder you solve out loud</small></h1>
-    <div class="meta"><span>Puzzle <b id="pn">1</b>/<b id="pt">6</b></span><span>Time <b id="time">0:00</b></span><span>Hints <b id="hints">0</b></span></div>
+    <div class="meta"><span>Puzzle <b id="pn">1</b>/<b id="pt">6</b></span><span>Time <b id="time">0:00</b></span><span>Hints <b id="hints">0</b></span><button class="chip small" id="newBtn" type="button">New puzzle</button></div>
   </header>
 
   <section class="clue" aria-live="polite">
@@ -129,16 +152,15 @@ summary { cursor: pointer; font-weight: 600 }
   <section class="voice">
     <div class="voice-top">
       <button id="mic" type="button"><span class="dot"></span><span id="micLbl">Start listening</span></button>
-      <button class="chip" id="ttsBtn" type="button">Voice replies: on</button>
-      <button class="chip" id="newBtn" type="button">New puzzle</button>
+      <button class="chip" id="ttsBtn" type="button">Read aloud: on</button>
     </div>
-    <div class="heard" id="heard">Say a word to fill the selected rung, or try “row 3”, “swap 2 and 4”, “hint”.</div>
+    <div class="heard" id="heard">Say an answer, or try “row 3”, “swap 2 and 4”, “hint”.</div>
     <div class="say" id="say" aria-live="polite"></div>
+    <div class="note" id="micState" aria-live="polite">Mic: off</div>
     <form id="cmdform" autocomplete="off">
       <input id="cmd" type="text" placeholder="Type what you would say, e.g. “move 5 up”" aria-label="Type a voice command">
       <button class="chip" type="submit">Send</button>
     </form>
-    <div class="note" id="micState" aria-live="polite">Mic: off</div>
     <div class="note" id="micNote">Voice needs Chrome, Edge or Safari and microphone access. If the mic is blocked, allow microphone access for this site in your browser settings, or use the box above. You can also type letters straight onto a rung.</div>
   </section>
 
@@ -223,7 +245,7 @@ summary { cursor: pointer; font-weight: 600 }
     for (var i = 0; i < 7; i++) {
       var r = rowAt(i), locked = (i === 0 || i === 6) && !S.open;
       var row = document.createElement("div");
-      row.className = "row" + (i === S.sel ? " sel" : "") + (locked ? " locked" : "") +
+      row.className = "row" + (i === S.sel ? " sel" : "") + (locked ? " locked" : "") + (i >= 1 && i <= 5 && !S.open && !S.done ? " movable" : "") +
         (r.g.length === 4 ? (r.g === r.a ? " good" : " bad") : "");
       row.setAttribute("role", "listitem"); row.dataset.i = i;
       row.setAttribute("aria-label", rowName(i) + ": " + (r.g || "empty"));
@@ -303,6 +325,47 @@ summary { cursor: pointer; font-weight: 600 }
   }
   function capital(s) { return s.charAt(0).toUpperCase() + s.slice(1) }
 
+  // ---------- drag to reorder (touch and mouse) ----------
+  var drag = null, suppressClick = false;
+  function dragStart(e) {
+    var row = e.target.closest(".row");
+    if (!row || e.target.closest("button") || e.button > 0) return;
+    var i = +row.dataset.i;
+    if (i < 1 || i > 5 || S.open || S.done) return;
+    drag = { i: i, to: i, row: row, y0: e.clientY, id: e.pointerId, active: false };
+  }
+  function dragMove(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var dy = e.clientY - drag.y0;
+    if (!drag.active) {
+      if (Math.abs(dy) < 8) return;
+      drag.active = true;
+      drag.mids = [].slice.call(document.querySelectorAll(".row")).filter(function (r) { var k = +r.dataset.i; return k >= 1 && k <= 5 });
+      drag.pitch = drag.mids[1].getBoundingClientRect().top - drag.mids[0].getBoundingClientRect().top;
+      drag.row.classList.add("dragging");
+      try { drag.row.setPointerCapture(e.pointerId) } catch (x) {}
+    }
+    e.preventDefault();
+    var lo = (1 - drag.i) * drag.pitch - drag.pitch * 0.4, hi = (5 - drag.i) * drag.pitch + drag.pitch * 0.4;
+    dy = Math.max(lo, Math.min(hi, dy));
+    drag.row.style.transform = "translateY(" + dy + "px)";
+    var to = Math.max(1, Math.min(5, drag.i + Math.round(dy / drag.pitch)));
+    drag.to = to;
+    drag.mids.forEach(function (r) {
+      var k = +r.dataset.i, shift = 0;
+      if (k === drag.i) return;
+      if (drag.i < to && k > drag.i && k <= to) shift = -drag.pitch;
+      if (drag.i > to && k < drag.i && k >= to) shift = drag.pitch;
+      r.style.transform = shift ? "translateY(" + shift + "px)" : "";
+    });
+  }
+  function dragEnd(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var d = drag; drag = null;
+    if (!d.active) return;
+    suppressClick = true; setTimeout(function () { suppressClick = false }, 50);
+    if (d.to !== d.i) moveRow(d.i, d.to, true); else render();
+  }
   function moveRow(from, to, quiet) {
     if (S.open) return say("The ladder is locked in. Solve the top and bottom rungs.");
     if (from < 1 || from > 5 || to < 1 || to > 5 || from === to) return say("Rungs one to five can move. Try “move 3 up” or “swap 1 and 4”.");
@@ -585,9 +648,14 @@ summary { cursor: pointer; font-weight: 600 }
     $("mic").classList.toggle("wake", listening && needTap);
     $("micLbl").textContent = !listening ? "Start listening" : needTap ? "Tap to keep listening" : "Listening… tap to stop";
   }
-  function syncTts() { $("ttsBtn").textContent = "Voice replies: " + (ttsOn ? "on" : "off"); if (!ttsOn && "speechSynthesis" in window) speechSynthesis.cancel() }
+  function syncTts() { $("ttsBtn").textContent = "Read aloud: " + (ttsOn ? "on" : "off"); if (!ttsOn && "speechSynthesis" in window) speechSynthesis.cancel() }
 
   // ---------- wiring ----------
+  $("ladder").addEventListener("pointerdown", dragStart);
+  document.addEventListener("pointermove", dragMove, { passive: false });
+  document.addEventListener("pointerup", dragEnd);
+  document.addEventListener("pointercancel", dragEnd);
+  $("ladder").addEventListener("click", function (e) { if (suppressClick) { e.stopPropagation(); suppressClick = false } }, true);
   $("mic").addEventListener("click", function () { if (needTap) return; listening ? stopMic(false) : startMic() });
   // Any tap on the page revives a paused iPhone mic (runs before the tap's own action).
   document.addEventListener("click", function () { if (needTap || (IOS && listening && !recRunning)) wakeFromTap() }, true);
@@ -617,7 +685,6 @@ summary { cursor: pointer; font-weight: 600 }
     if (data && data.S && data.S.mid) { S = data.S; ttsOn = IOS ? !!data.ttsOn : data.ttsOn !== false } else S = newState(0);
     syncTts(); render(); tick();
     if (IOS) $("micNote").textContent = "On iPhone and iPad: Siri & Dictation must be on (Settings → General → Keyboard → Enable Dictation), and Safari must be allowed to use the microphone. Spoken replies start off, because they stop the mic hearing you. You can also type commands in the box above or letters straight onto a rung.";
-    $("say").textContent = "Press Start listening, then say the answer to rung 1.";
     timerId = setInterval(tick, 500);
   }
   try { window.claude && window.claude.hot && window.claude.hot.snapshot && window.claude.hot.snapshot(function () { return { S: S, ttsOn: ttsOn } }) } catch (e) {}
