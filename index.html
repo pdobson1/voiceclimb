@@ -654,21 +654,33 @@ summary { cursor: pointer; font-weight: 600 }
   function syncTts() { $("ttsBtn").textContent = "Read aloud: " + (ttsOn ? "on" : "off"); if (!ttsOn && "speechSynthesis" in window) speechSynthesis.cancel() }
 
   // ---------- wiring ----------
+  // Touch: follow the touch on the element it started on (touch events keep going there even if
+  // the ladder is rebuilt), and own it from the start so Safari doesn't treat it as a scroll.
   $("ladder").addEventListener("touchstart", function (e) {
-    if (drag || e.touches.length > 1) { drag = null; return }
-    var t = e.changedTouches[0]; dragBegin(e.target, t.clientY, "t" + t.identifier);
-  }, { passive: true });
-  document.addEventListener("touchmove", function (e) {
-    if (!drag || drag.id.charAt(0) !== "t") return;
-    var t = touchById(e.changedTouches, +drag.id.slice(1)); if (!t) return;
-    if (dragTo(t.clientY)) e.preventDefault();
+    if (e.touches.length > 1) { drag = null; return }
+    var t = e.changedTouches[0], el = e.target;
+    drag = null;
+    dragBegin(el, t.clientY, "t" + t.identifier);
+    if (!drag) return;               // not a movable rung (or a button on it): leave the tap alone
+    e.preventDefault();              // no scroll, selection or callout; taps are handled below
+    var id = t.identifier, row = el.closest(".row"), tapRow = +row.dataset.i;
+    function move(ev) {
+      var tt = touchById(ev.changedTouches, id); if (!tt || !drag) return;
+      ev.preventDefault();
+      dragTo(tt.clientY);
+    }
+    function done(ev) {
+      if (!touchById(ev.changedTouches, id)) return;
+      el.removeEventListener("touchmove", move); el.removeEventListener("touchend", done); el.removeEventListener("touchcancel", done);
+      if (ev.cancelable) ev.preventDefault();
+      var wasDrag = drag && drag.active;
+      dragFinish();
+      if (!wasDrag && ev.type === "touchend") { wakeFromTap(); select(tapRow, true) }  // a plain tap
+    }
+    el.addEventListener("touchmove", move, { passive: false });
+    el.addEventListener("touchend", done, { passive: false });
+    el.addEventListener("touchcancel", done, { passive: false });
   }, { passive: false });
-  function touchDone(e) {
-    if (!drag || drag.id.charAt(0) !== "t" || !touchById(e.changedTouches, +drag.id.slice(1))) return;
-    if (dragFinish() && e.cancelable) e.preventDefault();  // no tap-click after a drag
-  }
-  document.addEventListener("touchend", touchDone, { passive: false });
-  document.addEventListener("touchcancel", touchDone, { passive: false });
   $("ladder").addEventListener("pointerdown", function (e) {
     if (e.pointerType === "touch" || e.button > 0) return;
     dragBegin(e.target, e.clientY, "p" + e.pointerId);
