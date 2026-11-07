@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rungs Voice Ladder</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=DM+Mono:wght@500&family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column; the puzzle is drawn as a wooden ladder whose rungs hold the words. */
+:root {
+  --bg: #ECEFF3; --surface: #FFFFFF; --ink: #17202B; --muted: #586474; --line: #CBD2DB;
+  --rail: #9C6B3E; --rail-dark: #7A522D; --accent: #2D58D0; --accent-soft: #DCE5FB;
+  --good: #1D7F54; --good-bg: #D9F1E5; --bad: #BE3D29; --bad-bg: #FBE1DB; --lock: #E2E6EB;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11151B; --surface: #1A2029; --ink: #E7EBF0; --muted: #9AA5B3; --line: #2E3742;
+  --rail: #B88757; --rail-dark: #8E6440; --accent: #7F9DFF; --accent-soft: #232F4D;
+  --good: #4FC48C; --good-bg: #163226; --bad: #F0806A; --bad-bg: #3A1F1A; --lock: #222932; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #11151B; --surface: #1A2029; --ink: #E7EBF0; --muted: #9AA5B3; --line: #2E3742;
+  --rail: #B88757; --rail-dark: #8E6440; --accent: #7F9DFF; --accent-soft: #232F4D;
+  --good: #4FC48C; --good-bg: #163226; --bad: #F0806A; --bad-bg: #3A1F1A; --lock: #222932; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px }
+.wrap { max-width: 560px; margin: 0 auto; display: grid; gap: 18px }
+header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap }
+h1 { font-family: var(--f-display); font-weight: 800; font-size: 2.2rem; line-height: 1; margin: 0; letter-spacing: -0.02em; text-wrap: balance }
+h1 small { display: block; font-family: var(--f-body); font-weight: 500; font-size: 0.85rem; color: var(--muted); letter-spacing: 0; margin-top: 6px }
+.meta { display: flex; gap: 14px; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.85rem }
+.meta b { color: var(--ink); font-weight: 600 }
+
+.clue { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 4px; min-height: 84px }
+.clue .lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600 }
+.clue .txt { font-family: var(--f-display); font-weight: 600; font-size: 1.25rem; line-height: 1.3; text-wrap: balance }
+.clue .phase { font-size: 0.85rem; color: var(--muted) }
+
+/* Ladder */
+.ladder { position: relative; padding: 6px 40px; display: grid; gap: 0 }
+.ladder::before, .ladder::after { content: ""; position: absolute; top: -8px; bottom: -8px; width: 12px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--rail), var(--rail-dark)) }
+.ladder::before { left: 14px } .ladder::after { right: 14px }
+.row { position: relative; display: grid; grid-template-columns: 2.2rem 1fr 2.2rem; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: 10px; border: 2px solid transparent; cursor: pointer; background: var(--surface); z-index: 1 }
+.row::before, .row::after { content: ""; position: absolute; top: 50%; height: 8px; width: 30px; margin-top: -4px; background: var(--rail-dark); z-index: -1 }
+.row::before { left: -30px } .row::after { right: -30px }
+.row.sel { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft) }
+.row.locked { background: var(--lock); cursor: default }
+.row .num { font-family: var(--f-mono); font-size: 0.8rem; color: var(--muted); text-align: center }
+.tiles { display: flex; gap: 6px; justify-content: center }
+.tile { width: 2.7rem; height: 2.7rem; border-radius: 6px; border: 1.5px solid var(--line); display: grid; place-items: center;
+  font-family: var(--f-mono); font-size: 1.35rem; text-transform: uppercase; background: var(--surface); color: var(--ink) }
+.row.locked .tile { background: transparent; border-style: dashed }
+.row.good .tile { background: var(--good-bg); border-color: var(--good); color: var(--good) }
+.row.bad .tile { background: var(--bad-bg); border-color: var(--bad); color: var(--bad) }
+.tile.diff { box-shadow: inset 0 -4px 0 var(--good) }
+.moves { display: grid; gap: 2px }
+.moves button { all: unset; cursor: pointer; text-align: center; font-size: 0.7rem; line-height: 1; padding: 4px 0; border-radius: 4px; color: var(--muted) }
+.moves button:hover { background: var(--accent-soft); color: var(--accent) }
+.moves button:focus-visible { outline: 2px solid var(--accent) }
+.gap { height: 12px; position: relative }
+.gap.link::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: var(--good); border-radius: 2px }
+.row.shake { animation: shake .35s }
+@keyframes shake { 25% { transform: translateX(-6px) } 50% { transform: translateX(6px) } 75% { transform: translateX(-3px) } }
+@media (prefers-reduced-motion: reduce) { .row.shake { animation: none } }
+
+/* Voice panel */
+.voice { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px }
+.voice-top { display: flex; gap: 12px; align-items: center; flex-wrap: wrap }
+#mic { font: 600 0.95rem var(--f-body); border: 0; border-radius: 999px; padding: 10px 18px; background: var(--accent); color: var(--surface); cursor: pointer; display: inline-flex; align-items: center; gap: 8px }
+#mic .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; opacity: .6 }
+#mic.on .dot { opacity: 1; animation: pulse 1.2s infinite }
+@keyframes pulse { 50% { transform: scale(1.6); opacity: .4 } }
+@media (prefers-reduced-motion: reduce) { #mic.on .dot { animation: none } }
+#mic:focus-visible, .chip:focus-visible, #cmd:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.chip { font: 500 0.85rem var(--f-body); border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 8px 14px; cursor: pointer }
+.chip:hover { border-color: var(--accent); color: var(--accent) }
+.heard { font-size: 0.9rem; color: var(--muted); min-height: 1.5em; overflow-wrap: anywhere }
+.heard b { color: var(--ink); font-weight: 600 }
+.say { font-size: 0.95rem; min-height: 1.5em }
+#cmdform { display: flex; gap: 8px }
+#cmd { flex: 1; min-width: 0; font: 400 0.95rem var(--f-body); padding: 9px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink) }
+.note { font-size: 0.82rem; color: var(--muted) }
+
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px }
+summary { cursor: pointer; font-weight: 600 }
+.cmds { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 16px; margin-top: 10px; font-size: 0.88rem }
+.cmds div { min-width: 0 }
+.cmds code { font-family: var(--f-mono); font-size: 0.82rem; color: var(--accent) }
+@media (max-width: 460px) { .cmds { grid-template-columns: 1fr } .tile { width: 2.3rem; height: 2.3rem; font-size: 1.15rem } .ladder { padding: 6px 30px } .ladder::before { left: 8px } .ladder::after { right: 8px } .row::before { left: -24px; width: 24px } .row::after { right: -24px; width: 24px } }
+
+.win { background: var(--good-bg); border: 1.5px solid var(--good); color: var(--ink); border-radius: 10px; padding: 14px 16px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap }
+.win strong { font-family: var(--f-display); font-size: 1.2rem }
+</style>
+<style>[hidden]{display:none!important} :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0} img{max-width:100%}</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Rungs<small>A word ladder you solve out loud</small></h1>
+    <div class="meta"><span>Puzzle <b id="pn">1</b>/<b id="pt">6</b></span><span>Time <b id="time">0:00</b></span><span>Hints <b id="hints">0</b></span></div>
+  </header>
+
+  <section class="clue" aria-live="polite">
+    <span class="lbl" id="clueLbl">Rung 1</span>
+    <span class="txt" id="clueTxt">…</span>
+    <span class="phase" id="phase"></span>
+  </section>
+
+  <div class="ladder" id="ladder" role="list"></div>
+
+  <div class="win" id="win" hidden>
+    <div><strong>Ladder climbed.</strong> <span id="winStats"></span></div>
+    <button class="chip" id="winNext" type="button">Next puzzle</button>
+  </div>
+
+  <section class="voice">
+    <div class="voice-top">
+      <button id="mic" type="button"><span class="dot"></span><span id="micLbl">Start listening</span></button>
+      <button class="chip" id="ttsBtn" type="button">Voice replies: on</button>
+      <button class="chip" id="newBtn" type="button">New puzzle</button>
+    </div>
+    <div class="heard" id="heard">Say a word to fill the selected rung, or try “row 3”, “swap 2 and 4”, “hint”.</div>
+    <div class="say" id="say" aria-live="polite"></div>
+    <form id="cmdform" autocomplete="off">
+      <input id="cmd" type="text" placeholder="Type what you would say, e.g. “move 5 up”" aria-label="Type a voice command">
+      <button class="chip" type="submit">Send</button>
+    </form>
+    <div class="note" id="micNote">Voice needs Chrome, Edge or Safari and microphone access. If the mic is blocked, allow microphone access for this site in your browser settings, or use the box above. You can also type letters straight onto a rung.</div>
+  </section>
+
+  <details>
+    <summary>How to play and what to say</summary>
+    <p class="note" style="margin:10px 0 0">Fill the five middle rungs from their clues. Then put them in order so each word changes exactly one letter from the next. Once the ladder is in order, the top and bottom rungs open. Solve both to finish.</p>
+    <div class="cmds">
+      <div><code>cord</code> or <code>it's cord</code><br>Answer the selected rung</div>
+      <div><code>row 2 is word</code><br>Answer a specific rung</div>
+      <div><code>spell c o r d</code><br>Spell it letter by letter</div>
+      <div><code>row 3</code>, <code>top</code>, <code>next</code><br>Choose a rung</div>
+      <div><code>swap 1 and 4</code><br>Swap two rungs</div>
+      <div><code>move 2 up</code>, <code>move 5 to 1</code><br>Move a rung</div>
+      <div><code>clue</code>, <code>read all</code><br>Hear clues again</div>
+      <div><code>hint</code>, <code>give up</code><br>Reveal a letter or the word</div>
+      <div><code>clear</code>, <code>check</code><br>Wipe a rung, hear progress</div>
+      <div><code>new puzzle</code>, <code>stop listening</code><br>Next ladder, mic off</div>
+    </div>
+    <p class="note" style="margin:10px 0 0">Keyboard: type letters, Backspace, ↑ ↓ to choose a rung, Shift + ↑ ↓ to move it.</p>
+  </details>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // Each puzzle: 7 words, every neighbour differs by one letter. Index 0 and 6 are the ends.
+  var PUZZLES = [
+    { w: ["COLD","CORD","WORD","WORE","WIRE","WISE","WIDE"],
+      c: ["Opposite of hot","Thin rope, or a stack of firewood","What you give when you promise","Had on, as clothes yesterday","Copper strand that carries current","Like an owl, proverbially","Opposite of narrow"] },
+    { w: ["HEAD","HEAL","TEAL","TELL","TOLL","TOIL","TAIL"],
+      c: ["Coin side that usually shows a face","Mend, as a cut does","Blue-green shade, also a small duck","Let a secret slip","Fee to cross a bridge","Hard, tiring labor","Coin side opposite the face"] },
+    { w: ["LOVE","DOVE","DOLE","DALE","DATE","GATE","HATE"],
+      c: ["Zero, in a tennis score","Bird that stands for peace","Hand out, usually followed by “out”","Valley, in old verse","Calendar square, or a dinner outing","Where you board a plane","Can't stand"] },
+    { w: ["BOOK","LOOK","LOOM","ROOM","ROAM","ROAD","READ"],
+      c: ["Reserve, as a table","Glance","Weaving frame, or tower over","Kitchen or den","Wander with no plan","Street","Take in a page"] },
+    { w: ["HAND","LAND","BAND","BOND","FOND","FOOD","FOOT"],
+      c: ["Give them a big ___ (applaud)","Touch down, as a plane","Group playing a gig","Certificate that pays interest","Affectionate","Groceries","Twelve inches"] },
+    { w: ["SHIP","SHOP","STOP","SLOP","SLOT","SOOT","BOOT"],
+      c: ["Send by courier","Store","Halt","Pig feed","Opening for a coin","Black chimney residue","Restart a computer"] }
+  ];
+
+  var NUM = { one:1, won:1, "1":1, first:1, two:2, to:2, too:2, "2":2, second:2, three:3, tree:3, free:3, "3":3, third:3,
+    four:4, for:4, fore:4, "4":4, fourth:4, five:5, "5":5, fifth:5, hive:5, top:0, bottom:6 };
+  var LETTER = { a:"a", ay:"a", eh:"a", b:"b", be:"b", bee:"b", c:"c", see:"c", sea:"c", d:"d", dee:"d", e:"e", f:"f", ef:"f", eff:"f",
+    g:"g", gee:"g", h:"h", aitch:"h", i:"i", eye:"i", j:"j", jay:"j", k:"k", kay:"k", l:"l", el:"l", ell:"l", m:"m", em:"m",
+    n:"n", en:"n", o:"o", oh:"o", p:"p", pee:"p", pea:"p", q:"q", queue:"q", cue:"q", r:"r", are:"r", ar:"r", s:"s", es:"s", ess:"s",
+    t:"t", tee:"t", tea:"t", u:"u", you:"u", v:"v", vee:"v", w:"w", x:"x", ex:"x", y:"y", why:"y", z:"z", zed:"z", zee:"z",
+    alpha:"a", bravo:"b", charlie:"c", delta:"d", echo:"e", foxtrot:"f", golf:"g", hotel:"h", india:"i", juliet:"j", kilo:"k",
+    lima:"l", mike:"m", november:"n", oscar:"o", papa:"p", quebec:"q", romeo:"r", sierra:"s", tango:"t", uniform:"u",
+    victor:"v", whiskey:"w", xray:"x", yankee:"y", zulu:"z" };
+  // Spoken words a recognizer may return for an answer that sounds the same.
+  var HOMO = { chord:"cord", cored:"cord", whirred:"word", war:"wore", whys:"wise", heel:"heal", "he'll":"heal", tale:"tail",
+    tole:"toll", gait:"gate", rode:"road", rowed:"road", reed:"read", red:"read", rome:"roam", banned:"band", dail:"dale",
+    doe:"dole", seat:"soot", suit:"soot", boat:"boot", shop:"shop", lewk:"look", rheum:"room" };
+  var FILLER = { that:1, this:1, with:1, what:1, have:1, think:1, maybe:1, about:1, four:1, five:1, nine:1, zero:1, said:1, says:1,
+    like:1, just:1, okay:1, yeah:1, word:1, guess:1, well:1, then:1, them:1, they:1, your:1, its:1, isnt:1, rung:1, line:1,
+    please:1, last:1, next:1, play:1, back:1, read:1, clue:1, move:1, swap:1, hint:1, help:1, down:1, row:1, rows:1 };
+
+  var S, ttsOn = true, listening = false, rec = null, speakingUntil = 0, timerId = null;
+  var $ = function (id) { return document.getElementById(id) };
+
+  function diff1(a, b) { if (!a || !b || a.length !== b.length) return false; var d = 0; for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) d++; return d === 1 }
+  function shuffle(arr) { for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = arr[i]; arr[i] = arr[j]; arr[j] = t } return arr }
+
+  function newState(pi) {
+    var p = PUZZLES[pi], mids = [1, 2, 3, 4, 5], order;
+    do { order = shuffle(mids.slice()) } while (chainOk(order.map(function (i) { return p.w[i] })));
+    return { pi: pi, mid: order.map(function (i) { return { a: p.w[i], c: p.c[i], g: "" } }),
+      top: { a: "", c: "", g: "" }, bot: { a: "", c: "", g: "" }, open: false, sel: 1, hints: 0, start: 0, elapsed: 0, done: false };
+  }
+  function chainOk(words) { for (var i = 0; i < words.length - 1; i++) if (!diff1(words[i], words[i + 1])) return false; return true }
+  function midSolved() { return S.mid.every(function (r) { return r.g === r.a }) }
+  function rowAt(i) { return i === 0 ? S.top : i === 6 ? S.bot : S.mid[i - 1] }
+  function rowName(i) { return i === 0 ? "the top rung" : i === 6 ? "the bottom rung" : "rung " + i }
+
+  // ---------- rendering ----------
+  function render() {
+    var L = $("ladder"); L.innerHTML = "";
+    for (var i = 0; i < 7; i++) {
+      var r = rowAt(i), locked = (i === 0 || i === 6) && !S.open;
+      var row = document.createElement("div");
+      row.className = "row" + (i === S.sel ? " sel" : "") + (locked ? " locked" : "") +
+        (r.g.length === 4 ? (r.g === r.a ? " good" : " bad") : "");
+      row.setAttribute("role", "listitem"); row.dataset.i = i;
+      row.setAttribute("aria-label", rowName(i) + ": " + (r.g || "empty"));
+      var num = document.createElement("span"); num.className = "num"; num.textContent = i === 0 ? "top" : i === 6 ? "end" : i;
+      var tiles = document.createElement("div"); tiles.className = "tiles";
+      var nb = i > 0 ? rowAt(i - 1) : null;
+      for (var k = 0; k < 4; k++) {
+        var t = document.createElement("span"); t.className = "tile"; t.textContent = r.g[k] || (locked ? "·" : "");
+        tiles.appendChild(t);
+      }
+      var moves = document.createElement("div"); moves.className = "moves";
+      if (i >= 1 && i <= 5 && !S.open) {
+        moves.appendChild(btn("▲", "Move rung " + i + " up", (function (n) { return function (e) { e.stopPropagation(); moveRow(n, n - 1, true) } })(i)));
+        moves.appendChild(btn("▼", "Move rung " + i + " down", (function (n) { return function (e) { e.stopPropagation(); moveRow(n, n + 1, true) } })(i)));
+      }
+      row.append(num, tiles, moves);
+      row.addEventListener("click", (function (n) { return function () { select(n, true) } })(i));
+      if (i > 0) {
+        var gap = document.createElement("div"); gap.className = "gap";
+        if (nb.g === nb.a && r.g === r.a && nb.a && diff1(r.a, nb.a)) gap.className += " link";
+        L.appendChild(gap);
+      }
+      L.appendChild(row);
+    }
+    var cur = rowAt(S.sel), lockedSel = (S.sel === 0 || S.sel === 6) && !S.open;
+    $("clueLbl").textContent = S.sel === 0 ? "Top rung" : S.sel === 6 ? "Bottom rung" : "Rung " + S.sel;
+    $("clueTxt").textContent = lockedSel ? "Locked until the five middle rungs are solved and in order." : cur.c;
+    $("phase").textContent = S.done ? "Solved." : S.open ? "The ladder is in order. Solve the top and bottom." :
+      midSolved() ? "All five are right. Now order them so each word changes one letter." :
+      S.mid.filter(function (r) { return r.g === r.a }).length + " of 5 middle rungs solved.";
+    $("pn").textContent = S.pi + 1; $("pt").textContent = PUZZLES.length; $("hints").textContent = S.hints;
+    $("win").hidden = !S.done;
+    if (S.done) $("winStats").textContent = "Time " + fmt(S.elapsed) + ", hints " + S.hints + ".";
+  }
+  function btn(txt, label, fn) { var b = document.createElement("button"); b.type = "button"; b.textContent = txt; b.setAttribute("aria-label", label); b.addEventListener("click", fn); return b }
+  function fmt(ms) { var s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0") }
+  function tick() { if (S.start && !S.done) S.elapsed = Date.now() - S.start; $("time").textContent = fmt(S.elapsed) }
+  function started() { if (!S.start) S.start = Date.now() - S.elapsed }
+
+  // ---------- speech out ----------
+  function say(text, quiet) {
+    $("say").textContent = text;
+    if (!ttsOn || quiet || !("speechSynthesis" in window)) return;
+    try {
+      speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text); u.rate = 1.05;
+      speakingUntil = Date.now() + 60000;
+      u.onend = u.onerror = function () { speakingUntil = Date.now() + 500 };
+      speechSynthesis.speak(u);
+    } catch (e) { speakingUntil = 0 }
+  }
+  function spell(w) { return w.split("").join(" ") }
+
+  // ---------- game actions ----------
+  function select(i, readClue) {
+    if (i < 0 || i > 6) return;
+    S.sel = i; render();
+    if (readClue) readCurrent();
+  }
+  function readCurrent() {
+    var i = S.sel;
+    if ((i === 0 || i === 6) && !S.open) return say("The " + (i === 0 ? "top" : "bottom") + " rung opens once the middle five are solved and in order.");
+    say(capital(rowName(i)) + ". " + rowAt(i).c);
+  }
+  function capital(s) { return s.charAt(0).toUpperCase() + s.slice(1) }
+
+  function moveRow(from, to, quiet) {
+    if (S.open) return say("The ladder is locked in. Solve the top and bottom rungs.");
+    if (from < 1 || from > 5 || to < 1 || to > 5 || from === to) return say("Rungs one to five can move. Try “move 3 up” or “swap 1 and 4”.");
+    started();
+    var r = S.mid.splice(from - 1, 1)[0]; S.mid.splice(to - 1, 0, r);
+    S.sel = to; afterChange(quiet ? null : "Moved to rung " + to + ".");
+  }
+  function swapRows(a, b) {
+    if (S.open) return say("The ladder is locked in. Solve the top and bottom rungs.");
+    if (a < 1 || a > 5 || b < 1 || b > 5 || a === b) return say("Name two rungs from one to five, like “swap 2 and 5”.");
+    started();
+    var t = S.mid[a - 1]; S.mid[a - 1] = S.mid[b - 1]; S.mid[b - 1] = t;
+    S.sel = b; afterChange("Swapped " + a + " and " + b + ".");
+  }
+
+  function answer(i, word) {
+    word = word.toUpperCase();
+    if ((i === 0 || i === 6) && !S.open) return say("That rung is locked. Solve the middle five and put them in order first.");
+    started();
+    var r = rowAt(i); r.g = word;
+    if (word === r.a) {
+      afterChange("Yes, " + word.toLowerCase() + ".", true);
+    } else {
+      render(); shake(i);
+      say(word.toLowerCase() + " isn't it for " + rowName(i) + ".");
+    }
+  }
+  function shake(i) {
+    var el = document.querySelector('.row[data-i="' + i + '"]'); if (!el) return;
+    el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake");
+  }
+
+  // Called after any correct answer or reorder: unlocks ends, detects the win, picks the next rung.
+  function afterChange(msg, advance) {
+    var parts = msg ? [msg] : [];
+    if (!S.open && midSolved() && chainOk(S.mid.map(function (r) { return r.a }))) {
+      var p = PUZZLES[S.pi], first = S.mid[0].a;
+      var topIdx = diff1(p.w[0], first) ? 0 : 6, botIdx = 6 - topIdx;
+      S.top = { a: p.w[topIdx], c: p.c[topIdx], g: "" }; S.bot = { a: p.w[botIdx], c: p.c[botIdx], g: "" };
+      S.open = true; S.sel = 0; render();
+      parts.push("The ladder is in order. Top rung: " + S.top.c);
+      return say(parts.join(" "));
+    }
+    if (S.open && S.top.g === S.top.a && S.bot.g === S.bot.a) {
+      S.done = true; S.elapsed = Date.now() - S.start; render();
+      parts.push("You climbed the ladder in " + Math.round(S.elapsed / 1000) + " seconds" + (S.hints ? " with " + S.hints + " hint" + (S.hints > 1 ? "s" : "") : "") + ". Say new puzzle for another.");
+      return say(parts.join(" "));
+    }
+    if (advance) {
+      var nxt = nextOpen(S.sel);
+      if (nxt !== -1) { S.sel = nxt; render(); var r = rowAt(nxt); parts.push(capital(rowName(nxt)) + ". " + r.c); return say(parts.join(" ")) }
+      if (midSolved() && !S.open) parts.push("All five are right. Now order them so each word changes one letter.");
+    }
+    render();
+    if (parts.length) say(parts.join(" "));
+  }
+  function nextOpen(from) {
+    var order = S.open ? [0, 6] : [1, 2, 3, 4, 5];
+    var start = order.indexOf(from);
+    for (var k = 1; k <= order.length; k++) {
+      var i = order[(start + k + order.length) % order.length];
+      var r = rowAt(i); if (r.g !== r.a) return i;
+    }
+    return -1;
+  }
+
+  function hint(whole) {
+    var i = S.sel, r = rowAt(i);
+    if ((i === 0 || i === 6) && !S.open) return say("That rung is locked, so there's nothing to hint yet.");
+    if (r.g === r.a) return say("That one is already solved.");
+    started();
+    var k = 0; while (k < 4 && r.g[k] === r.a[k]) k++;
+    if (whole) { S.hints += 4 - k; r.g = r.a; return afterChange("It's " + r.a.toLowerCase() + ".", true) }
+    S.hints++; r.g = r.a.slice(0, k + 1);
+    if (r.g === r.a) return afterChange("Last letter revealed: " + r.a.toLowerCase() + ".", true);
+    render(); say("It starts " + spell(r.g) + ".");
+  }
+  function clearRow() { var r = rowAt(S.sel); r.g = ""; render(); say("Cleared " + rowName(S.sel) + ".") }
+  function status() {
+    var n = S.mid.filter(function (r) { return r.g === r.a }).length;
+    if (S.done) return say("Solved. Say new puzzle for another.");
+    if (S.open) return say("The middle is done. " + [S.top, S.bot].filter(function (r) { return r.g !== r.a }).length + " end rungs left.");
+    if (n < 5) return say(n + " of 5 middle rungs solved.");
+    var bad = []; for (var i = 0; i < 4; i++) if (!diff1(S.mid[i].a, S.mid[i + 1].a)) bad.push((i + 1) + " and " + (i + 2));
+    say("All five solved. The chain breaks between " + bad.join(", ") + ".");
+  }
+  function readAll() {
+    var lines = [];
+    for (var i = 1; i <= 5; i++) { var r = S.mid[i - 1]; lines.push("Rung " + i + (r.g === r.a ? ", " + r.a.toLowerCase() : ": " + r.c) + ".") }
+    say(lines.join(" "));
+  }
+  function loadPuzzle(pi) {
+    S = newState(pi % PUZZLES.length); render(); tick();
+    say("Puzzle " + (S.pi + 1) + ". Rung 1. " + S.mid[0].c);
+  }
+
+  // ---------- understanding what was said ----------
+  function norm(t) { return t.toLowerCase().replace(/[.,!?;:"“”]/g, " ").replace(/-/g, " ").replace(/\s+/g, " ").trim() }
+  function n(tok) { return tok in NUM ? NUM[tok] : undefined }
+
+  function handle(alts) {
+    alts = alts.map(norm).filter(Boolean);
+    if (!alts.length) return;
+    var t = alts[0], m;
+    $("heard").innerHTML = "Heard: <b></b>"; $("heard").querySelector("b").textContent = "“" + t + "”";
+
+    if (/\b(stop listening|mic off|microphone off|go to sleep)\b/.test(t)) return stopMic(true);
+    if (/\b(new (game|puzzle|ladder)|next (puzzle|ladder)|another (one|puzzle))\b/.test(t)) return loadPuzzle(S.pi + 1);
+    if (/\b(restart|start over|reset)\b/.test(t)) return loadPuzzle(S.pi);
+    if (/\b(be quiet|mute|stop talking|voice off)\b/.test(t)) { ttsOn = false; syncTts(); return say("Voice replies off.", true) }
+    if (/\b(unmute|talk to me|voice on)\b/.test(t)) { ttsOn = true; syncTts(); return say("Voice replies on.") }
+    if (/\b(give up|solve it|reveal (the )?word|tell me)\b/.test(t)) return hint(true);
+    if (/\b(hint|help me|give me a letter|reveal|clue me)\b/.test(t)) return hint(false);
+    if (/\b(help|what can i say|commands)\b/.test(t)) { document.querySelector("details").open = true; return say("Say a word to answer. Say row and a number to choose a rung. Say swap two and four, or move three up, to reorder. Say hint for a letter.") }
+
+    if ((m = t.match(/\bswap (?:rows? |rungs? |number )?(\S+) (?:and|with|for|&) (?:row |rung |number )?(\S+)/)) && n(m[1]) !== undefined && n(m[2]) !== undefined) return swapRows(n(m[1]), n(m[2]));
+    if ((m = t.match(/\bmove (?:row |rung |number )?(\S+) (up|down|higher|lower)\b/)) && n(m[1]) !== undefined) return moveRow(n(m[1]), n(m[1]) + (/up|higher/.test(m[2]) ? -1 : 1));
+    if ((m = t.match(/\bmove (?:it |this |this one )?(up|down|higher|lower)\b/))) return moveRow(S.sel, S.sel + (/up|higher/.test(m[1]) ? -1 : 1));
+    if ((m = t.match(/\bmove (?:row |rung |number )?(\S+) (?:to|too|two|into|in) (?:row |rung |position |spot |number )?(\S+)/)) && n(m[1]) !== undefined && n(m[2]) !== undefined) return moveRow(n(m[1]), n(m[2]));
+    if ((m = t.match(/\bmove (?:it |this )?(?:to|too|into) (?:row |rung |position |spot |the )?(\S+)/)) && n(m[1]) !== undefined) return moveRow(S.sel, n(m[1]));
+
+    if (/\bread (all|everything|the ladder|the clues|clues)\b/.test(t)) return readAll();
+    if (/\b(clue|repeat|say (that|it) again|again|read it|what's the clue|what is the clue)\b/.test(t)) return readCurrent();
+    if (/\b(check|status|how am i doing|progress)\b/.test(t)) return status();
+    if (/\b(clear|delete|erase|backspace|wipe)\b/.test(t)) return clearRow();
+    if (/^(next|skip|next one|next rung|down)$/.test(t)) { var nx = nextOpen(S.sel); return select(nx === -1 ? Math.min(6, S.sel + 1) : nx, true) }
+    if (/^(previous|back|go back|up|last one)$/.test(t)) return select(Math.max(0, S.sel - 1), true);
+
+    // "row 3 is cord" / "3 is cord" / "cord for row 3"
+    var target = S.sel, rest = t;
+    if ((m = t.match(/\b(?:row |rung |line |number )?(\S+) (?:is|equals|=) (?:the word )?(.+)$/)) && n(m[1]) !== undefined) { target = n(m[1]); rest = m[2] }
+    else if ((m = t.match(/^(.+?) (?:for|on|in) (?:row|rung|line|number) (\S+)$/)) && n(m[2]) !== undefined) { target = n(m[2]); rest = m[1] }
+    else if ((m = t.match(/^(?:the )?(top|bottom)(?: one| rung)? (?:is )?(.+)$/))) { target = NUM[m[1]]; rest = m[2] }
+    else if ((m = t.match(/^(?:select |go to |goto |pick |choose )?(?:the )?(?:row |rung |line |number )?(\S+)(?: rung| one)?$/)) && n(m[1]) !== undefined && !/^(to|too|for|fore|free|tree|won)$/.test(m[1])) return select(n(m[1]), true);
+    else if ((m = t.match(/\b(?:select|go to|goto|pick|choose|row|rung|line)\s+(\S+)$/)) && n(m[1]) !== undefined) return select(n(m[1]), true);
+
+    // Spelled answers
+    var sp = rest.match(/\bspell(?:ed|ing|s)?(?: it)? (.+)$/);
+    var letterSrc = sp ? sp[1] : rest;
+    var letters = lettersOf(letterSrc);
+    if (letters && (sp || letterSrc.split(" ").every(function (x) { return x.length === 1 }))) {
+      if (letters.length === 4) return answer(target, letters);
+      return say("I got " + letters.length + " letters, " + spell(letters) + ". Spell all four.");
+    }
+
+    var exp = rowAt(target).a.toLowerCase(), lockedT = (target === 0 || target === 6) && !S.open;
+    var restAlts = target === S.sel && rest === t ? alts : [rest];
+    if (!lockedT && exp) {
+      for (var a = 0; a < restAlts.length; a++) {
+        var toks = restAlts[a].split(" ");
+        for (var k = 0; k < toks.length; k++) if (toks[k] === exp || HOMO[toks[k]] === exp) return answer(target, exp);
+      }
+    }
+    var cands = rest.split(" ").map(function (x) { return x.replace(/'/g, "") }).filter(function (x) { return /^[a-z]{4}$/.test(x) });
+    var good = cands.filter(function (x) { return !FILLER[x] });
+    var pick = good.length ? good[good.length - 1] : (cands.length === 1 && rest.split(" ").length === 1 ? cands[0] : null);
+    if (pick) return answer(target, pick);
+    say("I heard “" + t + "”. Say a four-letter word, or say help.");
+  }
+  function lettersOf(s) {
+    var out = "", toks = s.replace(/double (u|you)/g, "w").split(" ");
+    for (var i = 0; i < toks.length; i++) {
+      var tk = toks[i]; if (!tk || tk === "and" || tk === "then") continue;
+      if (LETTER[tk]) out += LETTER[tk];
+      else if (/^[a-z]+$/.test(tk) && tk.length <= 4 && toks.length === 1) out += tk;
+      else return null;
+    }
+    return out || null;
+  }
+
+  // ---------- microphone ----------
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  function startMic() {
+    if (!SR) { $("micNote").textContent = "This browser has no speech recognition. Use Chrome, Edge or Safari, or type commands in the box."; return }
+    if (!rec) {
+      rec = new SR(); rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 5;
+      rec.onresult = function (e) {
+        for (var i = e.resultIndex; i < e.results.length; i++) {
+          var r = e.results[i];
+          if (Date.now() < speakingUntil) continue;
+          if (r.isFinal) { var alts = []; for (var j = 0; j < r.length; j++) alts.push(r[j].transcript); handle(alts) }
+          else { $("heard").innerHTML = "Hearing: <b></b>"; $("heard").querySelector("b").textContent = r[0].transcript }
+        }
+      };
+      rec.onerror = function (e) {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") {
+          stopMic(false);
+          $("micNote").textContent = "The microphone is blocked. Allow microphone access for this site in your browser settings (on Mac and iPhone, also turn on Dictation), or type commands in the box above.";
+        }
+      };
+      rec.onend = function () { if (listening) { try { rec.start() } catch (e) {} } };
+    }
+    try { rec.start() } catch (e) {}
+    listening = true; syncMic();
+    if (!S.start) readCurrent();
+  }
+  function stopMic(announce) { listening = false; if (rec) try { rec.stop() } catch (e) {} syncMic(); if (announce) say("Microphone off.") }
+  function syncMic() { $("mic").classList.toggle("on", listening); $("micLbl").textContent = listening ? "Listening… tap to stop" : "Start listening" }
+  function syncTts() { $("ttsBtn").textContent = "Voice replies: " + (ttsOn ? "on" : "off"); if (!ttsOn && "speechSynthesis" in window) speechSynthesis.cancel() }
+
+  // ---------- wiring ----------
+  $("mic").addEventListener("click", function () { listening ? stopMic(false) : startMic() });
+  $("ttsBtn").addEventListener("click", function () { ttsOn = !ttsOn; syncTts() });
+  $("newBtn").addEventListener("click", function () { loadPuzzle(S.pi + 1) });
+  $("winNext").addEventListener("click", function () { loadPuzzle(S.pi + 1) });
+  $("cmdform").addEventListener("submit", function (e) { e.preventDefault(); var v = $("cmd").value.trim(); if (v) handle([v]); $("cmd").value = "" });
+  document.addEventListener("keydown", function (e) {
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var i = S.sel, r = rowAt(i), lockedSel = (i === 0 || i === 6) && !S.open;
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault(); var d = e.key === "ArrowUp" ? -1 : 1;
+      if (e.shiftKey) moveRow(i, i + d, true); else select(Math.min(6, Math.max(0, i + d)), false);
+    } else if (/^[a-zA-Z]$/.test(e.key) && !lockedSel && !S.done) {
+      if (r.g.length >= 4 || r.g === r.a) r.g = "";
+      r.g += e.key.toUpperCase(); started();
+      if (r.g.length === 4) answer(i, r.g); else render();
+    } else if (e.key === "Backspace" && !lockedSel) { e.preventDefault(); r.g = r.g.slice(0, -1); render() }
+  });
+
+  function start(data) {
+    if (data && data.S && data.S.mid) { S = data.S; ttsOn = data.ttsOn !== false } else S = newState(0);
+    syncTts(); render(); tick();
+    $("say").textContent = "Press Start listening, then say the answer to rung 1.";
+    timerId = setInterval(tick, 500);
+  }
+  try { window.claude && window.claude.hot && window.claude.hot.snapshot && window.claude.hot.snapshot(function () { return { S: S, ttsOn: ttsOn } }) } catch (e) {}
+  var hot = window.claude && window.claude.hot;
+  if (hot && hot.ready) hot.ready(start); else start(hot && hot.data ? hot.data : {});
+  window.__rungs = { handle: function (t) { handle([t]) }, state: function () { return S } };
+})();
+</script>
+
+</body>
+</html>
