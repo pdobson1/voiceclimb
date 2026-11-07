@@ -136,6 +136,7 @@ summary { cursor: pointer; font-weight: 600 }
       <input id="cmd" type="text" placeholder="Type what you would say, e.g. “move 5 up”" aria-label="Type a voice command">
       <button class="chip" type="submit">Send</button>
     </form>
+    <div class="note" id="micState" aria-live="polite">Mic: off</div>
     <div class="note" id="micNote">Voice needs Chrome, Edge or Safari and microphone access. If the mic is blocked, allow microphone access for this site in your browser settings, or use the box above. You can also type letters straight onto a rung.</div>
   </section>
 
@@ -195,7 +196,7 @@ summary { cursor: pointer; font-weight: 600 }
     like:1, just:1, okay:1, yeah:1, word:1, guess:1, well:1, then:1, them:1, they:1, your:1, its:1, isnt:1, rung:1, line:1,
     please:1, last:1, next:1, play:1, back:1, read:1, clue:1, move:1, swap:1, hint:1, help:1, down:1, row:1, rows:1 };
 
-  var S, ttsOn = true, listening = false, rec = null, recRunning = false, everStarted = false, failStreak = 0, watchdog = null, speakingUntil = 0, spokeAt = 0, timerId = null;
+  var S, ttsOn = true, listening = false, rec = null, recRunning = false, starting = false, consumed = {}, settleTimer = null, everStarted = false, failStreak = 0, watchdog = null, speakingUntil = 0, spokeAt = 0, timerId = null;
   var $ = function (id) { return document.getElementById(id) };
 
   function diff1(a, b) { if (!a || !b || a.length !== b.length) return false; var d = 0; for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) d++; return d === 1 }
@@ -271,7 +272,7 @@ summary { cursor: pointer; font-weight: 600 }
       speechSynthesis.cancel();
       var u = new SpeechSynthesisUtterance(text); u.rate = 1.05;
       spokeAt = Date.now(); speakingUntil = spokeAt + Math.min(15000, 1500 + text.length * 80);
-      u.onend = u.onerror = function () { speakingUntil = Date.now() + 400; setTimeout(ensureRec, 450) };
+      u.onend = u.onerror = function () { speakingUntil = Date.now() + 400 };
       speechSynthesis.speak(u);
     } catch (e) { speakingUntil = 0 }
   }
@@ -489,37 +490,62 @@ summary { cursor: pointer; font-weight: 600 }
     if (!SR) { $("micNote").textContent = "This browser has no speech recognition. Use Chrome, Edge or Safari, or type commands in the box."; return }
     if (!rec) {
       rec = new SR(); rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 5;
+      rec.onstart = function () { recRunning = true; starting = false; everStarted = true; consumed = {}; micStatus("listening") };
       rec.onresult = function (e) {
+        failStreak = 0;
         for (var i = e.resultIndex; i < e.results.length; i++) {
           var r = e.results[i];
-          if (busy()) continue;
-          if (r.isFinal) { var alts = []; for (var j = 0; j < r.length; j++) alts.push(r[j].transcript); handle(alts) }
-          else { $("heard").innerHTML = "Hearing: <b></b>"; $("heard").querySelector("b").textContent = r[0].transcript }
+          if (busy()) { consumed[i] = r[0].transcript.length; continue }  // the game's own voice
+          if (r.isFinal) { clearTimeout(settleTimer); take(i, r) }
+          else {
+            $("heard").innerHTML = "Hearing: <b></b>"; $("heard").querySelector("b").textContent = r[0].transcript.slice(consumed[i] || 0);
+            // Safari often never marks a phrase final while listening continuously,
+            // so act on it once it has stayed the same for a moment.
+            clearTimeout(settleTimer);
+            settleTimer = setTimeout((function (idx, res) { return function () { take(idx, res) } })(i, r), 1100);
+          }
         }
       };
-      rec.onstart = function () { recRunning = true; everStarted = true; failStreak = 0 };
       rec.onerror = function (e) {
+        micStatus("error: " + e.error);
         if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") {
-          if (everStarted && failStreak < 3) { failStreak++; return }  // a restart refused once; the watchdog tries again
+          failStreak++;
+          if (everStarted && failStreak < 3) return;  // a restart was refused; try again shortly
           stopMic(false);
           $("micNote").textContent = everStarted
             ? "Listening stopped because the browser refused to restart the microphone. Tap Start listening to carry on."
             : "The microphone is blocked. Allow microphone access for this site in your browser settings (on Mac and iPhone, also turn on Dictation), or type commands in the box above.";
         }
       };
-      rec.onend = function () { recRunning = false; if (listening) setTimeout(ensureRec, 250) };
+      rec.onend = function () {
+        recRunning = false; starting = false;
+        if (!listening) return micStatus("off");
+        micStatus("restarting");
+        // Restart straight away, inside the browser's own event, as some browsers refuse a delayed start.
+        tryStart();
+      };
     }
-    listening = true; syncMic(); ensureRec();
-    if (!watchdog) watchdog = setInterval(ensureRec, 1500);
+    listening = true; syncMic(); tryStart();
+    if (!watchdog) watchdog = setInterval(function () { if (listening && !recRunning && !starting) tryStart() }, 2000);
     if (!S.start) readCurrent();
   }
-  // Keeps recognition running while listening is on. Browsers end a session after silence,
-  // after each spoken reply (Safari), or on their own; this starts it again.
-  function ensureRec() {
-    if (!listening || !rec || recRunning || busy()) return;
-    try { rec.start(); recRunning = true } catch (e) {}
+  // Handles one recognized phrase, skipping any part of it already acted on.
+  function take(i, r) {
+    var full = r[0].transcript, from = consumed[i] || 0;
+    if (full.length <= from) return;
+    consumed[i] = full.length;
+    var alts = [full.slice(from)];
+    if (!from) for (var j = 1; j < r.length; j++) alts.push(r[j].transcript);
+    handle(alts);
   }
-  function stopMic(announce) { listening = false; if (rec) try { rec.stop() } catch (e) {} syncMic(); if (announce) say("Microphone off.") }
+  function tryStart() {
+    if (!listening || !rec || recRunning || starting) return;
+    starting = true;
+    try { rec.start() } catch (e) { starting = false }
+    setTimeout(function () { starting = false }, 3000);
+  }
+  function micStatus(t) { $("micState").textContent = "Mic: " + t }
+  function stopMic(announce) { listening = false; clearTimeout(settleTimer); if (rec) try { rec.stop() } catch (e) {} syncMic(); micStatus("off"); if (announce) say("Microphone off.") }
   function syncMic() { $("mic").classList.toggle("on", listening); $("micLbl").textContent = listening ? "Listening… tap to stop" : "Start listening" }
   function syncTts() { $("ttsBtn").textContent = "Voice replies: " + (ttsOn ? "on" : "off"); if (!ttsOn && "speechSynthesis" in window) speechSynthesis.cancel() }
 
